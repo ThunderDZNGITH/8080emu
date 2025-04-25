@@ -3,9 +3,12 @@
 #include <thread>
 #include <chrono>
 #include <iomanip> 
+#include <fstream>
  
 uint8_t reg_A, reg_B, reg_C, reg_D, reg_E, reg_H, reg_L; // ACCUMULATOR, GENERAL REGISTERS (8 bits)
 uint16_t reg_SP, reg_PC; // STACK POINTER, PROGRAM COUNTER (16 bits)
+
+uint8_t memory[0xFFFF] = {0x00};
 
 bool HALT = false;
  
@@ -55,7 +58,7 @@ void setRegister(RegisterRefs reg, uint8_t d8) {
             break;
     }
 }
-void setRegister(RegisterPairsRefs reg, uint16_t d16) {
+void setRegisterPair(RegisterPairsRefs reg, uint16_t d16) {
     switch(reg) {
         case RegisterPairsRefs::BC:
             reg_B = (d16 >> 8) & 0xFF;
@@ -66,7 +69,7 @@ void setRegister(RegisterPairsRefs reg, uint16_t d16) {
             reg_E = d16 & 0xFF;
             break;
         case RegisterPairsRefs::HL:
-            reg_H = (d16 << 8) & 0xFF;
+            reg_H = (d16 >> 8) & 0xFF;
             reg_L = d16 & 0xFF;
             break;
         case RegisterPairsRefs::SP:
@@ -77,7 +80,7 @@ void setRegister(RegisterPairsRefs reg, uint16_t d16) {
             break;
     }
 }
-void setRegister(RegisterPairsRefs reg, uint8_t d8h, uint8_t d8l) {
+void setRegisterPair(RegisterPairsRefs reg, uint8_t d8h, uint8_t d8l) {
     switch(reg) {
         case RegisterPairsRefs::BC:
             reg_B = d8h;
@@ -455,8 +458,159 @@ void MOV(RegisterRefs dest, RegisterRefs src){
 void MVI(RegisterRefs dest, uint8_t d8){
     setRegister(dest, d8);
 }  
+void LXI(RegisterPairsRefs dest, uint8_t d8h, uint8_t d8l){
+	setRegisterPair(dest, d8h, d8l);
+} 
+void STAX(RegisterPairsRefs destAddr){
+	memory[getRegister(destAddr)] = getRegister(RegisterRefs::A);
+} 
+void INX(RegisterPairsRefs dest){
+	setRegisterPair(dest, getRegister(dest)+1);
+}  
+void DCX(RegisterPairsRefs dest){
+	setRegisterPair(dest, getRegister(dest)-1);
+} 
+void INR(RegisterRefs dest){
+	setRegister(dest, getRegister(dest)+1);
+} 
+void DCR(RegisterRefs dest){
+	setRegister(dest, getRegister(dest)-1);
+} 
+void RLC_op(){};
+void RRC_op(){}; 
+void RAL_op(){};
+void RAR_op(){};  
+void DAD(RegisterPairsRefs src){
+	setRegisterPair(RegisterPairsRefs::HL, getRegister(RegisterPairsRefs::HL)+getRegister(src));
+}  
+void LDAX(RegisterPairsRefs srcAddr){
+	setRegister(RegisterRefs::A, memory[getRegister(srcAddr)]);
+} 
 
-uint8_t memory[0xFFFF] = {0x00};
+void getOperation(){
+    std::cout << "Actual instruction at 0x" << std::hex << std::setw(4) << std::setfill('0') << reg_PC << " : 0x" << std::hex << std::setw(2) << std::setfill('0') << (int)memory[reg_PC] << std::endl;
+	uint16_t ref = reg_PC;
+	switch(memory[reg_PC]){
+		case NOP:
+			break;
+		case LXI_B_D16:
+			LXI(RegisterPairsRefs::BC, memory[ref+0x2], memory[ref+0x1]);
+			reg_PC = reg_PC+2;
+			break;
+		case STAX_B:
+			STAX(RegisterPairsRefs::BC);
+			break;
+		case INX_B:
+			INX(RegisterPairsRefs::BC);
+			break;
+		case INR_B:
+			INR(RegisterRefs::B);
+			break;
+		case DCR_B:
+			DCR(RegisterRefs::B);
+			break;
+		case MVI_B_D8:
+			MVI(RegisterRefs::B, memory[ref+1]);
+			reg_PC++;
+			break;
+		case RLC: 
+			RLC_op();
+			break;
+		case DAD_B:
+			DAD(RegisterPairsRefs::BC);
+			break;
+		case LDAX_B:
+			LDAX(RegisterPairsRefs::BC);
+			break;
+		case DCX_B:
+			DCX(RegisterPairsRefs::BC);
+			break;
+		case INR_C:
+			INR(RegisterRefs::C);
+			break;
+		case DCR_C:
+			DCR(RegisterRefs::C);
+			break;
+		case MVI_C_D8:
+			MVI(RegisterRefs::C, memory[ref+1]);
+			reg_PC++;
+			break;
+		case RRC:
+			RRC_op();
+			break;
+
+		case LXI_D_D16:
+			LXI(RegisterPairsRefs::DE, memory[ref+0x2], memory[ref+0x1]);
+			reg_PC = reg_PC+2;
+			break;
+		case STAX_D:
+			STAX(RegisterPairsRefs::DE);
+			break;
+		case INX_D:
+			INX(RegisterPairsRefs::DE);
+			break;
+		case INR_D:
+			INR(RegisterRefs::D);
+			break;
+		case DCR_D:
+			DCR(RegisterRefs::D);
+			break;
+		case MVI_D_D8:
+			MVI(RegisterRefs::D, memory[ref+1]);
+			reg_PC++;
+			break;
+		case RAL:
+			RAL_op();
+			break;
+		case DAD_D:
+			DAD(RegisterPairsRefs::DE);
+			break;
+		case LDAX_D:
+			LDAX(RegisterPairsRefs::DE);
+			break;
+		case DCX_D:
+			DCX(RegisterPairsRefs::DE);
+			break;
+		case INR_E:
+			INR(RegisterRefs::E);
+			break;
+		case DCR_E:
+			DCR(RegisterRefs::E);
+        case MOV_C_B:
+            MOV(RegisterRefs::C, RegisterRefs::B);
+            break;
+        case MVI_A_D8:
+            MVI(RegisterRefs::A, memory[ref+1]);
+            reg_PC++;
+            break;
+		case HLT:
+			HALT = true;
+			break;
+        default:
+            break;
+    } 
+}
+
+void loadProgramInMemory(std::string path, uint8_t memory[], int memorySize, uint16_t offset){
+
+	std::ifstream file(path, std::ios::binary);
+	if(!file){
+		std::cerr << "Error: could not open program file.\n";
+	} 
+
+	size_t index = offset;
+	while(file && index < memorySize){
+		char byte;
+		file.get(byte);
+		if(file){
+			memory[index++] = static_cast<uint8_t>(byte); 
+		} 
+	} 
+
+	file.close();
+	std::cout << "Program loaded into memory at address 0x" << std::setw(4) << std::setfill('0') << std::hex << offset << std::endl;
+
+} 
 
 void update(){
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -465,24 +619,24 @@ void update(){
 
 void printRegisters(){
     std::cout << "Accumulator register : " << std::endl;
-    std::cout << "A : " << std::bitset<8>(getRegister(A)) << std::endl;
+    std::cout << "A : " << std::bitset<8>(getRegister(A)) << " - 0x" << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(reg_A) << std::endl;
     std::cout << std::endl;
     std::cout << "General purpose registers : " << std::endl;
-    std::cout << "B : " << std::bitset<8>(getRegister(B)) << std::endl;
-    std::cout << "C : " << std::bitset<8>(getRegister(C)) << std::endl;
-    std::cout << "D : " << std::bitset<8>(getRegister(D)) << std::endl;
-    std::cout << "E : " << std::bitset<8>(getRegister(E)) << std::endl;
-    std::cout << "H : " << std::bitset<8>(getRegister(H)) << std::endl;
-    std::cout << "L : " << std::bitset<8>(getRegister(L)) << std::endl;
+    std::cout << "B : " << std::bitset<8>(getRegister(B)) << " - 0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(reg_B) << std::endl;
+    std::cout << "C : " << std::bitset<8>(getRegister(C)) << " - 0x" << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(reg_C) << std::endl;
+    std::cout << "D : " << std::bitset<8>(getRegister(D)) << " - 0x" << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(reg_D) << std::endl;
+    std::cout << "E : " << std::bitset<8>(getRegister(E)) << " - 0x" << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(reg_E) << std::endl;
+    std::cout << "H : " << std::bitset<8>(getRegister(H)) << " - 0x" << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(reg_H) << std::endl;
+    std::cout << "L : " << std::bitset<8>(getRegister(L)) << " - 0x" << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(reg_L) << std::endl;
     std::cout << std::endl;
     std::cout << "Register pairs : " << std::endl;
-    std::cout << "BC : " << std::bitset<16>(getRegister(BC)) << std::endl;
-    std::cout << "DE : " << std::bitset<16>(getRegister(DE)) << std::endl;
-    std::cout << "HL : " << std::bitset<16>(getRegister(HL)) << std::endl;
+    std::cout << "BC : " << std::bitset<16>(getRegister(BC)) << " - 0x" << std::setw(4) << std::setfill('0') << std::hex << getRegister(BC) << std::endl;
+    std::cout << "DE : " << std::bitset<16>(getRegister(DE)) << " - 0x" << std::setw(4) << std::setfill('0') << std::hex << getRegister(DE) << std::endl;
+    std::cout << "HL : " << std::bitset<16>(getRegister(HL)) << " - 0x" << std::setw(4) << std::setfill('0') << std::hex << getRegister(HL) << std::endl;
     std::cout << std::endl;
     std::cout << "System registers : " << std::endl;
-    std::cout << "SP : " << std::bitset<16>(getRegister(SP)) << std::endl;
-    std::cout << "PC : " << std::bitset<16>(getRegister(PC)) << " - 0x" << std::hex << std::setw(4) << std::setfill('0') << getRegister(PC) << std::endl;
+    std::cout << "SP : " << std::bitset<16>(getRegister(SP)) << " - 0x" << std::setw(4) << std::setfill('0') << std::hex << getRegister(SP) << std::endl;
+    std::cout << "PC : " << std::bitset<16>(getRegister(PC)) << " - 0x" << std::setw(4) << std::setfill('0') << std::hex << getRegister(PC) << std::endl;
 }  
 
 void printAddressArray(uint8_t address[], int addressSize) {
@@ -522,34 +676,19 @@ void printAddressArray(uint8_t address[], int addressSize) {
     }
 }
 
-void getOperation(){
-    std::cout << "Actual instruction at 0x" << std::hex << std::setw(4) << std::setfill('0') << reg_PC << " : 0x" << std::hex << std::setw(2) << std::setfill('0') << (int)memory[reg_PC] << std::endl;
-    switch(memory[reg_PC]){
-        case MOV_C_B:
-            MOV(RegisterRefs::C, RegisterRefs::B);
-            break;
-        case MVI_A_D8:
-            MVI(RegisterRefs::A, memory[reg_PC+1]);
-            reg_PC++;
-            break;
-        default:
-            break;
-    } 
-} 
 
 int main() {
-    memory[0x7c00] = MOV_C_B; 
-    reg_PC = 0x7bFD;
 
-    setRegister(B, 0b10101010);
+	loadProgramInMemory("prog.bin", memory, sizeof(memory), 0x7c00);
 
-    memory[0x7c0f] = MVI_A_D8;
-    memory[0x7c10] = 0b11001100;  
+	reg_A = 0xAA;
+	memory[0x1234] = 0x55; 
+	reg_PC = 0x7c00;
 
     while(!HALT){
-        update();
         printRegisters();
         printAddressArray(memory, sizeof(memory));
         getOperation();
-    } 
+		update();
+    }
 }
