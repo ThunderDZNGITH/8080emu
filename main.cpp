@@ -7,6 +7,8 @@
  
 uint8_t reg_A, reg_B, reg_C, reg_D, reg_E, reg_H, reg_L; // ACCUMULATOR, GENERAL REGISTERS (8 bits)
 uint16_t reg_SP, reg_PC; // STACK POINTER, PROGRAM COUNTER (16 bits)
+uint16_t reg_RET; // INTERNAL
+uint8_t reg_FLAGS; // INTERNAL
 
 uint8_t memory[0xFFFF] = {0x00};
 
@@ -20,7 +22,8 @@ enum RegisterRefs {
     D = 0b010,
     E = 0b011,
     H = 0b100,
-    L = 0b101
+    L = 0b101,
+	FLAGS = 0b1000
 };
  
 // RP = Register Pair
@@ -29,7 +32,8 @@ enum RegisterPairsRefs {
     DE = 0b01,
     HL = 0b10,
     SP = 0b11,
-    PC = 0b100
+    PC = 0b100,
+	PSW = 0b101
 };
  
 void setRegister(RegisterRefs reg, uint8_t d8) {
@@ -75,6 +79,9 @@ void setRegisterPair(RegisterPairsRefs reg, uint16_t d16) {
         case RegisterPairsRefs::SP:
             reg_SP = d16;
             break;
+		case RegisterPairsRefs::PSW:
+			reg_A = (d16 >> 8) & 0xFF;
+			reg_FLAGS = d16 & 0xFF;
         default:
             reg_PC = d16;
             break;
@@ -128,6 +135,8 @@ uint8_t getRegister(RegisterRefs reg) {
         case RegisterRefs::L:
             return reg_L;
             break;
+		case RegisterRefs::FLAGS:
+			return reg_FLAGS;
         default:
             return 0;
             break;
@@ -151,6 +160,9 @@ uint16_t getRegister(RegisterPairsRefs reg) {
         case RegisterPairsRefs::PC:
             return reg_PC;
             break;
+		case RegisterPairsRefs::PSW:
+			return (static_cast<uint16_t>(reg_A) << 8) | reg_FLAGS;
+			break;
         default:
             return 0;
             break;
@@ -158,10 +170,27 @@ uint16_t getRegister(RegisterPairsRefs reg) {
     return 0;
 } 
 
-struct Flags {
-    bool Z, S, P, CY, AC; // ZERO, SIGN, PARITY, CARRY, AUX-CARRY
-};
+bool flag_Z, flag_S, flag_P, flag_CY, flag_AC; // ZERO, SIGN, PARITY, CARRY, AUX-CARRY
  
+void setBit(uint8_t& byte, uint8_t bit, bool value) {
+    if (value) {
+        byte |= (1 << bit);     // Met le bit à 1
+    } else {
+        byte &= ~(1 << bit);    // Met le bit à 0
+    }
+}
+
+void setFlagReg(){
+	setBit(reg_FLAGS, 0, flag_CY);
+	setBit(reg_FLAGS, 1, 0);
+	setBit(reg_FLAGS, 2, flag_P);
+	setBit(reg_FLAGS, 3, 0);
+	setBit(reg_FLAGS, 4, flag_AC);
+	setBit(reg_FLAGS, 5, 0);
+	setBit(reg_FLAGS, 6, flag_Z);
+	setBit(reg_FLAGS, 7, flag_S);
+} 
+
 enum OpCodes {
 	// 0x
 	NOP 		= 	0x00,		//	NOP									->	No operation
@@ -480,12 +509,251 @@ void RLC_op(){};
 void RRC_op(){}; 
 void RAL_op(){};
 void RAR_op(){};  
+void RIM_op(){}; 
+void SIM_op(){}; 
+void DAA_op(){}; 
+void CMA_op(){}; 
 void DAD(RegisterPairsRefs src){
 	setRegisterPair(RegisterPairsRefs::HL, getRegister(RegisterPairsRefs::HL)+getRegister(src));
 }  
 void LDAX(RegisterPairsRefs srcAddr){
 	setRegister(RegisterRefs::A, memory[getRegister(srcAddr)]);
 } 
+void SHLD(uint16_t destAddr){
+	memory[destAddr] = getRegister(RegisterRefs::L);
+	memory[destAddr+1] = getRegister(RegisterRefs::H);  
+} 
+void LHLD(uint16_t srcAddr){
+	setRegister(RegisterRefs::L, memory[srcAddr]);
+	setRegister(RegisterRefs::H, memory[srcAddr+1]);
+} 
+void STA(uint16_t destAddr){
+	memory[destAddr] = getRegister(RegisterRefs::A); 
+}  
+void LDA(uint16_t srcAddr){
+	setRegister(RegisterRefs::A, memory[srcAddr]);
+} 
+void STC_op(){}; 
+void CMC_op(){};  
+void ADD(RegisterRefs src){
+	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) + getRegister(src));
+};
+void ADC(RegisterRefs src){
+	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) + getRegister(src));
+};
+void ADI(uint8_t d8){
+	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) + d8);
+}; 
+void ACI(uint8_t d8){
+	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) + d8);
+}; 
+void SUB(RegisterRefs src){
+	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) - getRegister(src));
+};
+void SBB(RegisterRefs src){
+	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) - getRegister(src));
+};
+void SUI(uint8_t d8){
+	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) - d8);
+} 
+void SBI(uint8_t d8){
+	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) - d8);
+}
+void ANA(RegisterRefs src){
+	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) & getRegister(src));
+};
+void ANI(uint8_t d8){
+	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) & d8);
+}; 
+void XRA(RegisterRefs src){
+	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) ^ getRegister(src));
+};
+void XRI(uint8_t d8){
+	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) ^ d8);
+};
+void ORA(RegisterRefs src){
+	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) | getRegister(src));
+};
+void ORI(uint8_t d8){
+	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) | d8);
+}; 
+void CMP(RegisterRefs src){}; 
+void CPI(uint8_t d8){}; 
+void RNZ_op(){
+	if(flag_Z == false){
+		reg_PC = reg_RET;
+	} 
+} 
+void RZ_op(){
+	if(flag_Z == true){
+		reg_PC = reg_RET;
+	}  
+} ;
+void RNC_op(){
+	if(flag_CY == false){
+		reg_PC = reg_RET;
+	} 
+};
+void RC_op(){
+	if(flag_CY == true){
+		reg_PC = reg_RET;
+	} 
+}; 
+void RPO_op(){
+	if(flag_P == false){
+		reg_PC = reg_RET;
+	} 
+} 
+void RPE_op(){
+	if(flag_P == true){
+		reg_PC = reg_RET;
+	} 
+}; 
+void RP_op(){
+	if(flag_S == false){
+		reg_PC = reg_RET;
+	} 
+};
+void RM_op(){
+	if(flag_S == true){
+		reg_PC = reg_RET;
+	} 
+}  
+void RET_op(){
+	reg_PC = reg_RET;
+};
+void JNZ(uint16_t destAddr){
+	if(flag_Z == false){
+		reg_RET = reg_PC + 0x2;
+		reg_PC = destAddr;
+	} 
+};
+void JZ(uint16_t destAddr){
+	if(flag_Z == true){
+		reg_RET = reg_PC + 0x2;
+		reg_PC = destAddr;
+	} 
+};  
+void JNC(uint16_t destAddr){
+	if(flag_CY == false){
+		reg_RET = reg_PC + 0x2;
+		reg_PC = destAddr;
+	} 
+};
+void JC(uint16_t destAddr){
+	if(flag_CY == true){
+		reg_RET = reg_PC + 0x2;
+		reg_PC = destAddr;
+	} 
+};  
+void JPO(uint16_t destAddr){
+	if(flag_CY == false){
+		reg_RET = reg_PC + 0x2;
+		reg_PC = destAddr;
+	} 
+} 
+void JPE(uint16_t destAddr){
+	if(flag_CY == true){
+		reg_RET = reg_PC + 0x2;
+		reg_PC = destAddr;
+	} 
+} 
+void JP(uint16_t destAddr){
+	if(flag_S == false){
+		reg_RET = reg_PC + 0x2;
+		reg_PC = destAddr;
+	} 
+};
+void JM(uint16_t destAddr){
+	if(flag_S == true){
+		reg_RET = reg_PC + 0x2;
+		reg_PC = destAddr;
+	} 
+};
+void JMP(uint16_t destAddr){
+	reg_RET = reg_PC + 0x2;
+	reg_PC = destAddr;
+} 
+void CNZ(uint16_t destAddr){}; 
+void CZ(uint16_t destAddr){};
+void CNC(uint16_t destAddr){};
+void CC(uint16_t destAddr){};
+void CPO(uint16_t destAddr){}; 
+void CPE(uint16_t destAddr){}; 
+void CP(uint16_t destAddr){};
+void CM(uint16_t destAddr){};  
+void CALL(uint16_t destAddr){}; 
+void POP_op(RegisterRefs dest){
+	reg_SP++;
+    setRegister(dest, memory[getRegister(RegisterPairsRefs::SP)]);
+    memory[getRegister(RegisterPairsRefs::SP)] = 0x00;
+}; 
+void POPpsw(){
+	reg_SP++;
+    setRegister(FLAGS, memory[getRegister(RegisterPairsRefs::SP)]);
+    memory[getRegister(RegisterPairsRefs::SP)] = 0x00;
+	reg_SP++;
+    setRegister(A, memory[getRegister(RegisterPairsRefs::SP)]);
+    memory[getRegister(RegisterPairsRefs::SP)] = 0x00;
+};
+void PUSH_op(RegisterRefs src){
+	memory[getRegister(RegisterPairsRefs::SP)] = getRegister(src);
+    --reg_SP;
+}; 
+void PUSHpsw(){
+	memory[getRegister(RegisterPairsRefs::SP)] = getRegister(FLAGS);
+    --reg_SP;
+	memory[getRegister(RegisterPairsRefs::SP)] = getRegister(A);
+    --reg_SP;
+}; 
+void RST(int mode){
+	switch(mode){
+		case 0:
+			reg_RET = reg_PC+1;
+			reg_PC = 0x0000;
+			break;
+		case 1:
+			reg_RET = reg_PC+1;
+			reg_PC = 0x0008;
+			break;
+		case 2:
+			reg_RET = reg_PC+1;
+			reg_PC = 0x0010;
+			break;
+		case 3:
+			reg_RET = reg_PC+1;
+			reg_PC = 0x0018;
+			break;
+		case 4:
+			reg_RET = reg_PC+1;
+			reg_PC = 0x0020;
+			break;
+		case 5:
+			reg_RET = reg_PC+1;
+			reg_PC = 0x0028;
+			break;
+		case 6:
+			reg_RET = reg_PC+1;
+			reg_PC = 0x0030;
+			break;
+		case 7:
+			reg_RET = reg_PC+1;
+			reg_PC = 0x0038;
+			break;
+	} 
+}; 
+void OUT(uint8_t portAddr){
+	memory[portAddr] = getRegister(RegisterRefs::A); 
+} 
+void IN(uint8_t portAddr){
+	setRegister(RegisterRefs::A, memory[portAddr]);
+} 
+void PCHL_op(){
+	setRegisterPair(RegisterPairsRefs::PC, getRegister(RegisterPairsRefs::HL));
+} 
+void SPHL_op(){
+	setRegisterPair(RegisterPairsRefs::SP, getRegister(RegisterPairsRefs::HL));
+};  
 
 void getOperation(){
     std::cout << "Actual instruction at 0x" << std::hex << std::setw(4) << std::setfill('0') << reg_PC << " : 0x" << std::hex << std::setw(2) << std::setfill('0') << (int)memory[reg_PC] << std::endl;
@@ -495,7 +763,7 @@ void getOperation(){
 			break;
 		case LXI_B_D16:
 			LXI(RegisterPairsRefs::BC, memory[ref+0x2], memory[ref+0x1]);
-			reg_PC = reg_PC+2;
+			reg_PC = reg_PC + 2;
 			break;
 		case STAX_B:
 			STAX(RegisterPairsRefs::BC);
@@ -510,7 +778,7 @@ void getOperation(){
 			DCR(RegisterRefs::B);
 			break;
 		case MVI_B_D8:
-			MVI(RegisterRefs::B, memory[ref+1]);
+			MVI(RegisterRefs::B, memory[ref+0x1]);
 			reg_PC++;
 			break;
 		case RLC: 
@@ -532,7 +800,7 @@ void getOperation(){
 			DCR(RegisterRefs::C);
 			break;
 		case MVI_C_D8:
-			MVI(RegisterRefs::C, memory[ref+1]);
+			MVI(RegisterRefs::C, memory[ref+0x1]);
 			reg_PC++;
 			break;
 		case RRC:
@@ -541,7 +809,7 @@ void getOperation(){
 
 		case LXI_D_D16:
 			LXI(RegisterPairsRefs::DE, memory[ref+0x2], memory[ref+0x1]);
-			reg_PC = reg_PC+2;
+			reg_PC = reg_PC + 2;
 			break;
 		case STAX_D:
 			STAX(RegisterPairsRefs::DE);
@@ -556,7 +824,7 @@ void getOperation(){
 			DCR(RegisterRefs::D);
 			break;
 		case MVI_D_D8:
-			MVI(RegisterRefs::D, memory[ref+1]);
+			MVI(RegisterRefs::D, memory[ref+0x1]);
 			reg_PC++;
 			break;
 		case RAL:
@@ -576,16 +844,690 @@ void getOperation(){
 			break;
 		case DCR_E:
 			DCR(RegisterRefs::E);
-        case MOV_C_B:
-            MOV(RegisterRefs::C, RegisterRefs::B);
-            break;
-        case MVI_A_D8:
-            MVI(RegisterRefs::A, memory[ref+1]);
-            reg_PC++;
-            break;
+			break;
+		case MVI_E_D8:
+			MVI(RegisterRefs::E, memory[ref+0x1]);
+			reg_PC++;
+			break;
+		case RAR:
+			RAR_op();
+			break;
+		
+		case RIM:
+			RIM_op();
+			break;
+		case LXI_H_D16:
+			LXI(RegisterPairsRefs::HL, memory[ref+0x2], memory[ref+0x1]);
+			reg_PC = reg_PC + 2;
+			break;
+		case SHLD_A16:
+			SHLD(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			reg_PC = reg_PC + 2;
+			break;
+		case INX_H:
+			INX(RegisterPairsRefs::HL);
+			break;
+		case INR_H:
+			INR(RegisterRefs::H);
+			break;
+		case DCR_H:
+			DCR(RegisterRefs::H);
+			break;
+		case MVI_H_D8:
+			MVI(RegisterRefs::H, memory[ref+0x1]);
+			reg_PC++;
+			break;
+		case DAA:
+			DAA_op();
+			break;
+		case DAD_H:
+			DAD(RegisterPairsRefs::HL);
+			break;
+		case LHLD_A16:
+			LHLD(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			reg_PC = reg_PC + 2;
+			break;
+		case DCX_H:
+			DCX(RegisterPairsRefs::HL);
+			break;
+		case INR_L:
+			INR(RegisterRefs::L);
+			break;
+		case DCR_L:
+			DCR(RegisterRefs::L);
+			break;
+		case MVI_L_D8:
+			MVI(RegisterRefs::L, memory[ref+0x1]);
+			reg_PC++;
+			break;
+		case CMA:
+			CMA_op();
+			break;
+
+		case SIM:
+			SIM_op();
+			break;
+		case LXI_SP_D16:
+			LXI(RegisterPairsRefs::SP, memory[ref+0x2], memory[ref+0x1]);
+			reg_PC = reg_PC + 2;
+			break;
+		case STA_A16:
+			STA(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			reg_PC++;
+			break;
+		case INX_SP:
+			INX(RegisterPairsRefs::SP);
+			break;
+		case INR_M:
+			memory[getRegister(RegisterPairsRefs::HL)] = memory[getRegister(RegisterPairsRefs::HL)] + 1;
+			break;
+		case DCR_M:
+			memory[getRegister(RegisterPairsRefs::HL)] = memory[getRegister(RegisterPairsRefs::HL)] - 1;
+			break;
+		case MVI_M_D8:
+			memory[getRegister(RegisterPairsRefs::HL)] = memory[ref+0x1];
+			reg_PC++;
+			break;
+		case STC:
+			STC_op();
+			break;  
+		case DAD_SP:
+			DAD(RegisterPairsRefs::SP);
+			break;
+		case LDA_A16:
+			LDA(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			reg_PC = reg_PC + 2;
+			break;
+		case DCX_SP:
+			DCX(RegisterPairsRefs::SP);
+			break;
+		case INR_A:
+			INR(RegisterRefs::A);
+			break;
+		case DCR_A:
+			DCR(RegisterRefs::A);
+			break;
+		case MVI_A_D8:
+			MVI(RegisterRefs::A, memory[ref+0x1]);
+			reg_PC++;
+			break;
+		case CMC:
+			CMC_op();
+			break;
+
+		case MOV_B_B:
+			MOV(RegisterRefs::B, RegisterRefs::B);
+			break;
+		case MOV_B_C:
+			MOV(RegisterRefs::B, RegisterRefs::C);
+			break;
+		case MOV_B_D:
+			MOV(RegisterRefs::B, RegisterRefs::D);
+			break;
+		case MOV_B_E:
+			MOV(RegisterRefs::B, RegisterRefs::E);
+			break;
+		case MOV_B_H:
+			MOV(RegisterRefs::B, RegisterRefs::H);
+			break;
+		case MOV_B_L:
+			MOV(RegisterRefs::B, RegisterRefs::L);
+			break;
+		case MOV_B_M:
+			setRegister(RegisterRefs::B, memory[getRegister(RegisterPairsRefs::HL)]);
+			break;
+		case MOV_B_A:
+			MOV(RegisterRefs::B, RegisterRefs::A);
+			break;
+		case MOV_C_B:
+			MOV(RegisterRefs::C, RegisterRefs::B);
+			break;
+		case MOV_C_C:
+			MOV(RegisterRefs::C, RegisterRefs::C);
+			break;
+		case MOV_C_D:
+			MOV(RegisterRefs::C, RegisterRefs::D);
+			break;
+		case MOV_C_E:
+			MOV(RegisterRefs::C, RegisterRefs::E);
+			break;
+		case MOV_C_H:
+			MOV(RegisterRefs::C, RegisterRefs::H);
+			break;
+		case MOV_C_L:
+			MOV(RegisterRefs::C, RegisterRefs::L);
+			break;
+		case MOV_C_M:
+			setRegister(RegisterRefs::C, memory[getRegister(RegisterPairsRefs::HL)]);
+			break;
+		case MOV_C_A:
+			MOV(RegisterRefs::C, RegisterRefs::A);
+			break;
+
+		case MOV_D_B:
+			MOV(RegisterRefs::D, RegisterRefs::B);
+			break;
+		case MOV_D_C:
+			MOV(RegisterRefs::D, RegisterRefs::C);
+			break;
+		case MOV_D_D:
+			MOV(RegisterRefs::D, RegisterRefs::D);
+			break;
+		case MOV_D_E:
+			MOV(RegisterRefs::D, RegisterRefs::E);
+			break;
+		case MOV_D_H:
+			MOV(RegisterRefs::D, RegisterRefs::H);
+			break;
+		case MOV_D_L:
+			MOV(RegisterRefs::D, RegisterRefs::L);
+			break;
+		case MOV_D_M:
+			setRegister(RegisterRefs::D, memory[getRegister(RegisterPairsRefs::HL)]);
+			break;
+		case MOV_D_A:
+			MOV(RegisterRefs::D, RegisterRefs::A);
+			break;
+		case MOV_E_B:
+			MOV(RegisterRefs::E, RegisterRefs::B);
+			break;
+		case MOV_E_C:
+			MOV(RegisterRefs::E, RegisterRefs::C);
+			break;
+		case MOV_E_D:
+			MOV(RegisterRefs::E, RegisterRefs::D);
+			break;
+		case MOV_E_E:
+			MOV(RegisterRefs::E, RegisterRefs::E);
+			break;
+		case MOV_E_H:
+			MOV(RegisterRefs::E, RegisterRefs::H);
+			break;
+		case MOV_E_L:
+			MOV(RegisterRefs::E, RegisterRefs::L);
+			break;
+		case MOV_E_M:
+			setRegister(RegisterRefs::E, memory[getRegister(RegisterPairsRefs::HL)]);
+			break;
+		case MOV_E_A:
+			MOV(RegisterRefs::E, RegisterRefs::A);
+			break;
+
+		case MOV_H_B:
+			MOV(RegisterRefs::H, RegisterRefs::B);
+			break;
+		case MOV_H_C:
+			MOV(RegisterRefs::H, RegisterRefs::C);
+			break;
+		case MOV_H_D:
+			MOV(RegisterRefs::H, RegisterRefs::D);
+			break;
+		case MOV_H_E:
+			MOV(RegisterRefs::H, RegisterRefs::E);
+			break;
+		case MOV_H_H:
+			MOV(RegisterRefs::H, RegisterRefs::H);
+			break;
+		case MOV_H_L:
+			MOV(RegisterRefs::H, RegisterRefs::L);
+			break;
+		case MOV_H_M:
+			setRegister(RegisterRefs::H, memory[getRegister(RegisterPairsRefs::HL)]);
+			break;
+		case MOV_H_A:
+			MOV(RegisterRefs::H, RegisterRefs::A);
+			break;
+		case MOV_L_B:
+			MOV(RegisterRefs::L, RegisterRefs::B);
+			break;
+		case MOV_L_C:
+			MOV(RegisterRefs::L, RegisterRefs::C);
+			break;
+		case MOV_L_D:
+			MOV(RegisterRefs::L, RegisterRefs::D);
+			break;
+		case MOV_L_E:
+			MOV(RegisterRefs::L, RegisterRefs::E);
+			break;
+		case MOV_L_H:
+			MOV(RegisterRefs::L, RegisterRefs::H);
+			break;
+		case MOV_L_L:
+			MOV(RegisterRefs::L, RegisterRefs::L);
+			break;
+		case MOV_L_M:
+			setRegister(RegisterRefs::L, memory[getRegister(RegisterPairsRefs::HL)]);
+			break;
+		case MOV_L_A:
+			MOV(RegisterRefs::L, RegisterRefs::A);
+			break;
+
+		case MOV_M_B:
+			memory[getRegister(RegisterPairsRefs::HL)] = getRegister(RegisterRefs::B); 
+			break;
+		case MOV_M_C:
+			memory[getRegister(RegisterPairsRefs::HL)] = getRegister(RegisterRefs::C);
+			break;
+		case MOV_M_D:
+			memory[getRegister(RegisterPairsRefs::HL)] = getRegister(RegisterRefs::D);
+			break;
+		case MOV_M_E:
+			memory[getRegister(RegisterPairsRefs::HL)] = getRegister(RegisterRefs::E);
+			break;
+		case MOV_M_H:
+			memory[getRegister(RegisterPairsRefs::HL)] = getRegister(RegisterRefs::H);
+			break;
+		case MOV_M_L:
+			memory[getRegister(RegisterPairsRefs::HL)] = getRegister(RegisterRefs::L);
+			break;
 		case HLT:
 			HALT = true;
 			break;
+		case MOV_M_A:
+			memory[getRegister(RegisterPairsRefs::HL)] = getRegister(RegisterRefs::A);
+			break;
+		case MOV_A_B:
+			MOV(RegisterRefs::A, RegisterRefs::B);
+			break;
+		case MOV_A_C:
+			MOV(RegisterRefs::A, RegisterRefs::C);
+			break;
+		case MOV_A_D:
+			MOV(RegisterRefs::A, RegisterRefs::D);
+			break;
+		case MOV_A_E:
+			MOV(RegisterRefs::A, RegisterRefs::E);
+			break;
+		case MOV_A_H:
+			MOV(RegisterRefs::A, RegisterRefs::H);
+			break;
+		case MOV_A_L:
+			MOV(RegisterRefs::A, RegisterRefs::L);
+			break;
+		case MOV_A_M:
+			setRegister(RegisterRefs::A, memory[getRegister(RegisterPairsRefs::HL)]);
+			break;
+		case MOV_A_A:
+			MOV(RegisterRefs::A, RegisterRefs::A);
+			break;
+
+		case ADD_B:
+			ADD(RegisterRefs::B);
+			break;
+		case ADD_C:
+			ADD(RegisterRefs::C);
+			break;
+		case ADD_D:
+			ADD(RegisterRefs::D);
+			break;
+		case ADD_E:
+			ADD(RegisterRefs::E);
+			break;
+		case ADD_H:
+			ADD(RegisterRefs::H);
+			break;
+		case ADD_L:
+			ADD(RegisterRefs::L);
+			break;
+		case ADD_M:
+			setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) + memory[getRegister(RegisterPairsRefs::HL)]);
+			break;
+		case ADD_A:
+			ADD(RegisterRefs::A);
+			break;
+		case ADC_B:
+			ADC(RegisterRefs::B);
+			break;
+		case ADC_C:
+			ADC(RegisterRefs::C);
+			break;
+		case ADC_D:
+			ADC(RegisterRefs::D);
+			break;
+		case ADC_E:
+			ADC(RegisterRefs::E);
+			break;
+		case ADC_H:
+			ADC(RegisterRefs::H);
+			break;
+		case ADC_L:
+			ADC(RegisterRefs::L);
+			break;
+		case ADC_M:
+			setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) + memory[getRegister(RegisterPairsRefs::HL)]);
+			break;
+		case ADC_A:
+			ADC(RegisterRefs::A);
+			break;
+
+		case SUB_B:
+			SUB(RegisterRefs::B);
+			break;
+		case SUB_C:
+			SUB(RegisterRefs::C);
+			break;
+		case SUB_D:
+			SUB(RegisterRefs::D);
+			break;
+		case SUB_E:
+			SUB(RegisterRefs::E);
+			break;
+		case SUB_H:
+			SUB(RegisterRefs::H);
+			break;
+		case SUB_L:
+			SUB(RegisterRefs::L);
+			break;
+		case SUB_M:
+			setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) - memory[getRegister(RegisterPairsRefs::HL)]);
+			break;
+		case SUB_A:
+			SUB(RegisterRefs::A);
+			break;
+		case SBB_B:
+			SBB(RegisterRefs::B);
+			break;
+		case SBB_C:
+			SBB(RegisterRefs::C);
+			break;
+		case SBB_D:
+			SBB(RegisterRefs::D);
+			break;
+		case SBB_E:
+			SBB(RegisterRefs::E);
+			break;
+		case SBB_H:
+			SBB(RegisterRefs::H);
+			break;
+		case SBB_L:
+			SBB(RegisterRefs::L);
+			break;
+		case SBB_M:
+			setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) - memory[getRegister(RegisterPairsRefs::HL)]);
+			break;
+		case SBB_A:
+			SBB(RegisterRefs::A);
+			break;
+
+		case ANA_B:
+			ANA(RegisterRefs::B);
+			break;
+		case ANA_C:
+			ANA(RegisterRefs::C);
+			break;
+		case ANA_D:
+			ANA(RegisterRefs::D);
+			break;
+		case ANA_E:
+			ANA(RegisterRefs::E);
+			break;
+		case ANA_H:
+			ANA(RegisterRefs::H);
+			break;
+		case ANA_L:
+			ANA(RegisterRefs::L);
+			break;
+		case ANA_M:
+			setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) & memory[getRegister(RegisterPairsRefs::HL)]);
+			break;
+		case ANA_A:
+			ANA(RegisterRefs::A);
+			break;
+		case XRA_B:
+			XRA(RegisterRefs::B);
+			break;
+		case XRA_C:
+			XRA(RegisterRefs::C);
+			break;
+		case XRA_D:
+			XRA(RegisterRefs::D);
+			break;
+		case XRA_E:
+			XRA(RegisterRefs::E);
+			break;
+		case XRA_H:
+			XRA(RegisterRefs::H);
+			break;
+		case XRA_L:
+			XRA(RegisterRefs::L);
+			break;
+		case XRA_M:
+			setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) ^ memory[getRegister(RegisterPairsRefs::HL)]);
+			break;
+		case XRA_A:
+			XRA(RegisterRefs::A);
+			break;
+
+		case ORA_B:
+			ORA(RegisterRefs::B);
+			break;
+		case ORA_C:
+			ORA(RegisterRefs::C);
+			break;
+		case ORA_D:
+			ORA(RegisterRefs::D);
+			break;
+		case ORA_E:
+			ORA(RegisterRefs::E);
+			break;
+		case ORA_H:
+			ORA(RegisterRefs::H);
+			break;
+		case ORA_L:
+			ORA(RegisterRefs::L);
+			break;
+		case ORA_M:
+			setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) | memory[getRegister(RegisterPairsRefs::HL)]);
+			break;
+		case ORA_A:
+			ORA(RegisterRefs::A);
+			break;
+		case CMP_B:
+			CMP(RegisterRefs::B);
+			break;
+		case CMP_C:
+			CMP(RegisterRefs::C);
+			break;
+		case CMP_D:
+			CMP(RegisterRefs::D);
+			break;
+		case CMP_E:
+			CMP(RegisterRefs::E);
+			break;
+		case CMP_H:
+			CMP(RegisterRefs::H);
+			break;
+		case CMP_L:
+			CMP(RegisterRefs::L);
+			break;
+		case CMP_M:
+			setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) | memory[getRegister(RegisterPairsRefs::HL)]);
+			break;
+		case CMP_A:
+			CMP(RegisterRefs::A);
+			break;
+
+		case RNZ:
+			RNZ_op();
+			break;reg_RET = reg_PC+1;
+		case POP_B:
+			POP_op(RegisterRefs::B);
+			break;
+		case JNZ_A16:
+			JNZ(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			break;
+		case JMP_A16:
+			JMP(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			break;
+		case CNZ_A16:
+			CNZ(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			break;
+		case PUSH_B:
+			PUSH_op(RegisterRefs::B);
+			break;
+		case ADI_D8:
+			ADI(memory[ref+0x1]);
+			reg_PC++;
+			break;
+		case RST_0:
+			RST(0);
+			break;
+		case RZ:
+			RZ_op();
+			break;
+		case RET:
+			RET_op();
+			break;
+		case JZ_A16:
+			JZ(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			break;
+		case CZ_A16:
+			CZ(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			break;
+		case RST_1:
+			RST(1);
+			break;
+
+		case RNC:
+			RNC_op();
+			break;
+		case POP_D:
+			POP_op(RegisterRefs::D);
+			break;
+		case JNC_A16:
+			JNC(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			break;
+		case OUT_D8:
+			OUT(memory[ref+0x1]);
+			reg_PC++;
+			break;
+		case CNC_A16:
+			CNC(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			break;
+		case PUSH_D:
+			PUSH_op(RegisterRefs::D);
+			break;
+		case SUI_D8:
+			SUI(memory[ref+0x1]);
+			reg_PC++;
+			break;
+		case RST_2:
+			RST(2);
+			break;
+		case RC:
+			RC_op();
+			break;
+		case JC_A16:
+			JC(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			break;
+		case IN_D8:
+			IN(memory[ref+0x1]);
+			reg_PC++;
+			break;
+		case CC_A16:
+			CC(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			break;
+		case SBI_D8:
+			SBI(memory[ref+0x1]);
+			reg_PC++;
+			break;
+		case RST_3:
+			RST(3);
+			break;
+		
+		case RPO:
+			RPO_op();
+			break;
+		case POP_H:
+			POP_op(RegisterRefs::H);
+			break;
+		case JPO_A16:
+			JPO(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			break;
+		case CPO_A16:
+			CPO(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			break;
+		case PUSH_H:
+			PUSH_op(RegisterRefs::H);
+			break;
+		case ANI_D8:
+			ANI(memory[ref+0x1]);
+			reg_PC++;
+			break;
+		case RST_4:
+			RST(4);
+			break;
+		case RPE:
+			RPE_op();
+			break;
+		case PCHL:
+			PCHL_op();
+		case JPE_A16:
+			JPE(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			break;
+		case XCHG:
+			uint16_t temp = 0;
+			temp = getRegister(RegisterPairsRefs::DE);
+			setRegisterPair(RegisterPairsRefs::DE, getRegister(RegisterPairsRefs::HL));
+			setRegisterPair(RegisterPairsRefs::HL, temp);
+			break;
+		case CPE_A16:
+			CPE(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			break;
+		case XRI_D8:
+			XRI(memory[ref+0x1]);
+			reg_PC++;
+			break;
+		case RST_5:
+			RST(5);
+			break;
+
+		case RP:
+			RP_op();
+			break;
+		case POP_PSW:
+			POPpsw();
+			break;
+		case JP_A16:
+			JP(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			break;
+		case DI:
+			break;
+		case CP_A16:
+			CP(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			break;
+		case PUSH_PSW:
+			PUSHpsw();
+			break;
+		case ORI_D8:
+			ORI(memory[ref+0x1]);
+			reg_PC++;
+			break;
+		case RST_6:
+			RST(6);
+			break;
+		case RM:
+			RM_op();
+			break;
+		case SPHL:
+			SPHL_op();
+			break;
+		case JM_A16:
+			JM(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			break;
+		case EI:
+			break;
+		case CM_A16:
+			CM(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
+			break;
+		case CPI_D8:
+			CPI(memory[ref+0x1]);
+			reg_PC++;
+			break;
+		case RST_7:
+			RST(7);
+			break;
+
         default:
             break;
     } 
@@ -617,6 +1559,12 @@ void update(){
     reg_PC++;
 } 
 
+void clearPort(){
+	for(uint16_t i = 0xFF00; i > (0xFF00-256); i--){
+		memory[i] = 0x00;  
+	};
+} 
+
 void printRegisters(){
     std::cout << "Accumulator register : " << std::endl;
     std::cout << "A : " << std::bitset<8>(getRegister(A)) << " - 0x" << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(reg_A) << std::endl;
@@ -637,6 +1585,7 @@ void printRegisters(){
     std::cout << "System registers : " << std::endl;
     std::cout << "SP : " << std::bitset<16>(getRegister(SP)) << " - 0x" << std::setw(4) << std::setfill('0') << std::hex << getRegister(SP) << std::endl;
     std::cout << "PC : " << std::bitset<16>(getRegister(PC)) << " - 0x" << std::setw(4) << std::setfill('0') << std::hex << getRegister(PC) << std::endl;
+	std::cout << "FLAGS : " << std::bitset<8>(getRegister(FLAGS)) << " - 0x" << std::setw(2) << std::setfill('0') << std::hex << getRegister(FLAGS) << std::endl;
 }  
 
 void printAddressArray(uint8_t address[], int addressSize) {
@@ -679,15 +1628,22 @@ void printAddressArray(uint8_t address[], int addressSize) {
 
 int main() {
 
-	loadProgramInMemory("prog.bin", memory, sizeof(memory), 0x7c00);
+	//loadProgramInMemory("prog.bin", memory, sizeof(memory), 0x7c00);
 
-	reg_A = 0xAA;
-	memory[0x1234] = 0x55; 
 	reg_PC = 0x7c00;
 
+	reg_H = 0x12;
+	reg_L = 0x34;
+
+	memory[0x7c00] = SHLD_A16;
+	memory[0x7c01] = 0xFE;
+	memory[0x7c02] = 0x7C; 
+	
     while(!HALT){
+		setFlagReg();
         printRegisters();
         printAddressArray(memory, sizeof(memory));
+		clearPort();
         getOperation();
 		update();
     }
