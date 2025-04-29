@@ -179,7 +179,44 @@ void setBit(uint8_t& byte, uint8_t bit, bool value) {
         byte &= ~(1 << bit);    // Met le bit à 0
     }
 }
+enum FlagType {
+    FLAG_Z  = 1 << 0,  // Zero
+    FLAG_S  = 1 << 1,  // Sign
+    FLAG_P  = 1 << 2,  // Parity
+    FLAG_AC = 1 << 3,  // Auxiliary Carry (calcul basé sur nibble inférieur)
+    FLAG_CY = 1 << 4   // Carry (valeur > 255 pour 8 bits)
+};
 
+void checkFlags(uint8_t value, uint8_t previous, uint8_t flagsToCheck) {
+	if (flagsToCheck & FLAG_Z)
+		flag_Z = (value == 0);
+
+	if (flagsToCheck & FLAG_S)
+		flag_S = (value & 0x80) != 0;
+
+	if (flagsToCheck & FLAG_P) {
+		uint8_t count = 0;
+		for (uint8_t i = 0; i < 8; ++i)
+			if (value & (1 << i)) ++count;
+				flag_P = (count % 2 == 0);  // even parity
+	}
+
+	if (flagsToCheck & FLAG_AC)
+		flag_AC = ((previous & 0x0F) + (value & 0x0F)) > 0x0F;
+
+	if (flagsToCheck & FLAG_CY){
+		if(previous == 0xFF){
+			if(value > 0xFF || value == 0){
+				flag_CY = true;
+			} else {
+				flag_CY = false;
+			} 
+		} else {
+			flag_CY = false;
+		} 
+	} 
+		
+}
 void setFlagReg(){
 	setBit(reg_FLAGS, 0, flag_CY);
 	setBit(reg_FLAGS, 1, 0);
@@ -500,10 +537,14 @@ void DCX(RegisterPairsRefs dest){
 	setRegisterPair(dest, getRegister(dest)-1);
 } 
 void INR(RegisterRefs dest){
+	uint8_t prev = getRegister(dest);
 	setRegister(dest, getRegister(dest)+1);
+	checkFlags(getRegister(dest), prev, FLAG_S | FLAG_Z | FLAG_AC | FLAG_P);
 } 
 void DCR(RegisterRefs dest){
+	uint8_t prev = getRegister(dest);
 	setRegister(dest, getRegister(dest)-1);
+	checkFlags(getRegister(dest), prev, FLAG_S | FLAG_Z | FLAG_AC | FLAG_P);
 } 
 void RLC_op(){};
 void RRC_op(){}; 
@@ -514,7 +555,9 @@ void SIM_op(){};
 void DAA_op(){}; 
 void CMA_op(){}; 
 void DAD(RegisterPairsRefs src){
+	uint8_t prev = getRegister(src);
 	setRegisterPair(RegisterPairsRefs::HL, getRegister(RegisterPairsRefs::HL)+getRegister(src));
+	checkFlags(getRegister(src), prev, FLAG_CY);
 }  
 void LDAX(RegisterPairsRefs srcAddr){
 	setRegister(RegisterRefs::A, memory[getRegister(srcAddr)]);
@@ -536,49 +579,99 @@ void LDA(uint16_t srcAddr){
 void STC_op(){}; 
 void CMC_op(){};  
 void ADD(RegisterRefs src){
+	uint8_t prev = getRegister(src);
 	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) + getRegister(src));
+	checkFlags(getRegister(src), prev, FLAG_S | FLAG_Z | FLAG_AC | FLAG_P | FLAG_CY);
 };
 void ADC(RegisterRefs src){
+	uint8_t prev = getRegister(src);
 	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) + getRegister(src));
+	checkFlags(getRegister(src), prev, FLAG_S | FLAG_Z | FLAG_AC | FLAG_P | FLAG_CY);
 };
 void ADI(uint8_t d8){
+	uint8_t prev = getRegister(A);
 	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) + d8);
+	checkFlags(getRegister(A), prev, FLAG_S | FLAG_Z | FLAG_AC | FLAG_P | FLAG_CY);
 }; 
 void ACI(uint8_t d8){
+	uint8_t prev = getRegister(A);
 	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) + d8);
+	checkFlags(getRegister(A), prev, FLAG_S | FLAG_Z | FLAG_AC | FLAG_P | FLAG_CY);
 }; 
 void SUB(RegisterRefs src){
+	uint8_t prev = getRegister(src);
 	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) - getRegister(src));
+	checkFlags(getRegister(src), prev, FLAG_S | FLAG_Z | FLAG_AC | FLAG_P | FLAG_CY);
 };
 void SBB(RegisterRefs src){
+	uint8_t prev = getRegister(src);
 	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) - getRegister(src));
+	checkFlags(getRegister(src), prev, FLAG_S | FLAG_Z | FLAG_AC | FLAG_P | FLAG_CY);
 };
 void SUI(uint8_t d8){
+	uint8_t prev = getRegister(A);
 	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) - d8);
+	checkFlags(getRegister(A), prev, FLAG_S | FLAG_Z | FLAG_AC | FLAG_P | FLAG_CY);
 } 
 void SBI(uint8_t d8){
+	uint8_t prev = getRegister(A);
 	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) - d8);
+	checkFlags(getRegister(A), prev, FLAG_S | FLAG_Z | FLAG_AC | FLAG_P | FLAG_CY);
 }
 void ANA(RegisterRefs src){
+	uint8_t prev = getRegister(src);
 	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) & getRegister(src));
+	checkFlags(getRegister(src), prev, FLAG_S | FLAG_Z | FLAG_AC | FLAG_P | FLAG_CY);
 };
 void ANI(uint8_t d8){
+	uint8_t prev = getRegister(A);
 	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) & d8);
+	checkFlags(getRegister(A), prev, FLAG_S | FLAG_Z | FLAG_AC | FLAG_P | FLAG_CY);
 }; 
 void XRA(RegisterRefs src){
+	uint8_t prev = getRegister(src);
 	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) ^ getRegister(src));
+	checkFlags(getRegister(src), prev, FLAG_S | FLAG_Z | FLAG_AC | FLAG_P | FLAG_CY);
 };
 void XRI(uint8_t d8){
+	uint8_t prev = getRegister(A);
 	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) ^ d8);
+	checkFlags(getRegister(A), prev, FLAG_S | FLAG_Z | FLAG_AC | FLAG_P | FLAG_CY);
 };
 void ORA(RegisterRefs src){
+	uint8_t prev = getRegister(src);
 	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) | getRegister(src));
+	checkFlags(getRegister(src), prev, FLAG_S | FLAG_Z | FLAG_AC | FLAG_P | FLAG_CY);
 };
 void ORI(uint8_t d8){
+	uint8_t prev = getRegister(A);
 	setRegister(RegisterRefs::A, getRegister(RegisterRefs::A) | d8);
+	checkFlags(getRegister(A), prev, FLAG_S | FLAG_Z | FLAG_AC | FLAG_P | FLAG_CY);
 }; 
-void CMP(RegisterRefs src){}; 
-void CPI(uint8_t d8){}; 
+void CMP(RegisterRefs src){
+	uint8_t acc = getRegister(RegisterRefs::A);
+    uint8_t value = getRegister(src);
+    uint8_t result = acc - value;
+
+    // Set flags based on the result
+    flag_S = (result & 0x80) != 0;
+    flag_Z = (result == 0);
+    flag_P = __builtin_parity(result);
+    flag_CY = (acc < value); // Carry flag is set if borrow occurs
+    flag_AC = ((acc & 0x0F) < (value & 0x0F)); // Auxiliary carry
+}; 
+void CPI(uint8_t d8){
+	uint8_t acc = getRegister(RegisterRefs::A);
+    uint8_t value = d8;
+    uint8_t result = acc - value;
+
+    // Set flags based on the result
+    flag_S = (result & 0x80) != 0;
+    flag_Z = (result == 0);
+    flag_P = __builtin_parity(result);
+    flag_CY = (acc < value); // Carry flag is set if borrow occurs
+    flag_AC = ((acc & 0x0F) < (value & 0x0F)); // Auxiliary carry
+}; 
 void RNZ_op(){
 	if(flag_Z == false){
 		reg_PC = reg_RET;
@@ -758,6 +851,7 @@ void SPHL_op(){
 void getOperation(){
     std::cout << "Actual instruction at 0x" << std::hex << std::setw(4) << std::setfill('0') << reg_PC << " : 0x" << std::hex << std::setw(2) << std::setfill('0') << (int)memory[reg_PC] << std::endl;
 	uint16_t ref = reg_PC;
+	uint16_t temp = 0;
 	switch(memory[reg_PC]){
 		case NOP:
 			break;
@@ -1349,7 +1443,7 @@ void getOperation(){
 
 		case RNZ:
 			RNZ_op();
-			break;reg_RET = reg_PC+1;
+			break;
 		case POP_B:
 			POP_op(RegisterRefs::B);
 			break;
@@ -1466,7 +1560,6 @@ void getOperation(){
 			JPE(static_cast<uint16_t>(memory[ref+0x2] << 8 | memory[ref+0x1]));
 			break;
 		case XCHG:
-			uint16_t temp = 0;
 			temp = getRegister(RegisterPairsRefs::DE);
 			setRegisterPair(RegisterPairsRefs::DE, getRegister(RegisterPairsRefs::HL));
 			setRegisterPair(RegisterPairsRefs::HL, temp);
@@ -1555,7 +1648,7 @@ void loadProgramInMemory(std::string path, uint8_t memory[], int memorySize, uin
 } 
 
 void update(){
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
     reg_PC++;
 } 
 
@@ -1628,16 +1721,14 @@ void printAddressArray(uint8_t address[], int addressSize) {
 
 int main() {
 
-	//loadProgramInMemory("prog.bin", memory, sizeof(memory), 0x7c00);
+	loadProgramInMemory("prog.bin", memory, sizeof(memory), 0x0000);
 
-	reg_PC = 0x7c00;
-
-	reg_H = 0x12;
-	reg_L = 0x34;
-
-	memory[0x7c00] = SHLD_A16;
-	memory[0x7c01] = 0xFE;
-	memory[0x7c02] = 0x7C; 
+	reg_PC = 0x0000;
+	memory[0x3000] = 0x05;
+	memory[0x3001] = 0x02;
+	memory[0x3002] = 0x04;
+	memory[0x3003] = 0x01;  
+	memory[0x3004] = 0x03;  
 	
     while(!HALT){
 		setFlagReg();
